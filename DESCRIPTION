@@ -1,0 +1,14 @@
+Package: leanr
+Type: Package
+Title: Prepare market data for Lean
+Version: 0.1.0
+Author: Mislav Sagovac
+Maintainer: The package maintainer <yourself@somewhere.net>
+Description: The package prepares market data for Lean backtesting engine
+License: MIT
+Encoding: UTF-8
+Import:
+  httr,
+  rvest
+LazyData: true
+RoxygenNote: 7.1.1
