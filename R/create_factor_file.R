@@ -4,18 +4,17 @@
 #' @param ticker Stock ticker
 #' @param ohlcv Data table with OHLCV columns
 #' @param api_key FMP cloud API key
-#' @param save_path Dir path to save factor files
+#' @param save_dir Dir path to save factor files
 #' @return Stock IPO date
 #' @import httr
-#' @import rvest
 #' @import fmpcloudr
 #' @import data.table
 #' @importFrom zoo na.locf
 #' @examples
 #' data("aapl")
-#' create_factor_file("AAPL", aapl, api_key = Sys.getenv("APIKEY"), save_path = "./')
+#' create_factor_file("AAPL", aapl, api_key = Sys.getenv("APIKEY"), save_dir = "./')
 #' @export
-create_factor_file <- function(ticker, ohlcv, api_key, save_path) {
+create_factor_file <- function(ticker, ohlcv, api_key, save_dir) {
 
   # solve No visible binding for global variable
   symbol <- adjDividend <- `.` <- NULL
@@ -23,16 +22,22 @@ create_factor_file <- function(ticker, ohlcv, api_key, save_path) {
   fmpc_set_token(api_key)
 
   # daily market data df should be the input
-  ohlcv$date <- as.Date(ohlcv$datetime)
+  # ohlcv$date <- as.Date(ohlcv$datetime)
   ohlcv <- as.data.table(ohlcv)
   df <- ohlcv[symbol == ticker, .(date, close)]
 
   # add splits data
   splits <- as.data.table(get_stock_split_factor(ticker))
+  # if (ticker == "WST") {
+  #
+  #   splits$date <- splits$date + 1
+  #   splits$date <- splits$date + 1
+  #   }
   if (all(is.na(splits))) {
     df[, split_factor := NA]
   } else {
     df <- splits[df, on = "date"]
+    df$ratio <- NULL
   }
 
   # get dividends
@@ -41,6 +46,9 @@ create_factor_file <- function(ticker, ohlcv, api_key, save_path) {
   if (all(is.na(dividends))) {
     df[, dividend := NA]
   } else {
+    if (!("dividend" %in% names(dividends))) {
+      dividends[, dividend := adjDividend]
+    }
     dividends <- dividends[, dividend := ifelse(is.na(dividend) & adjDividend > 0, adjDividend, dividend)]
     dividends <- dividends[, .(date, dividend)]
     df <- dividends[df, on = "date"]
@@ -48,21 +56,31 @@ create_factor_file <- function(ticker, ohlcv, api_key, save_path) {
 
   # if no splits and dividends return factor files with start and end dates
   if (length(dividends) == 0 & nrow(splits) == 0) {
-    factor_file <- data.table(date = c(as.character(format.Date(df$date[1]), "%Y%m%d"), "20500101"),
+    factor_file <- data.table(date = c("20040102", "20500101"),
                               price_factor = c(1, 1),
                               split_factor = c(1, 1),
                               lag_close = c(df$close[1], 0))
     # save
-    fwrite(factor_file, file.path(save_path, paste0(tolower(ticker), ".csv")), col.names = FALSE, row.names = FALSE)
+    fwrite(factor_file, file.path(save_dir, paste0(tolower(ticker), ".csv")), col.names = FALSE, row.names = FALSE)
     return(factor_file)
   }
 
   # clean data
   df[, `:=`(lag_close = shift(close),
             date = shift(date))]
+  df <- df[!is.na(date)]
 
   # keep oly dividend ot split days
   factor_file <- df[(!is.na(dividend) & dividend != 0) | !is.na(split_factor), .(date, dividend, split_factor, lag_close)]
+  if (nrow(factor_file) == 0) {
+    factor_file <- data.table(date = c("20040102", "20500101"),
+                              price_factor = c(1, 1),
+                              split_factor = c(1, 1),
+                              lag_close = c(df$close[1], 0))
+    # save
+    fwrite(factor_file, file.path(save_dir, paste0(tolower(ticker), ".csv")), col.names = FALSE, row.names = FALSE)
+    return(factor_file)
+  }
   factor_file <- unique(factor_file)
   # factor_file <- factor_file[date < as.Date("2018-06-01")] # TO COMPARE WITH QC
   factor_file[, split_factor := na.locf(split_factor, rev = TRUE, na.rm = FALSE)]
@@ -96,13 +114,7 @@ create_factor_file <- function(ticker, ohlcv, api_key, save_path) {
   factor_file <- factor_file[, .(date, price_factor, split_factor, lag_close)]
 
   # save
-  fwrite(factor_file, file.path("D:/factor_files", paste0(tolower(ticker), ".csv")), col.names = FALSE, row.names = FALSE)
+  fwrite(factor_file, file.path(save_dir, paste0(tolower(ticker), ".csv")), col.names = FALSE, row.names = FALSE)
 
   return(factor_file)
 }
-# data("aapl")
-# ticker <- 'AAPL'
-# ohlcv <- aapl
-# api_key <- "15cd5d0adf4bc6805a724b4417bbaafc"
-# save_path <- "D:/factor_files"
-# create_factor_file(ticker, ohlcv, api_key, save_path)

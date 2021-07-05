@@ -5,7 +5,6 @@
 #' @param api_key Fmp cloud API key.
 #' @return Stock IPO date
 #' @import httr
-#' @import rvest
 #' @examples
 #' get_ticker_changes("AAPL)
 #' @export
